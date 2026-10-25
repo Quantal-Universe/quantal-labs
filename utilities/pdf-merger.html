@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantal Universe - PDF Compiler & Merger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .drag-over { border-color: #6366f1 !important; background-color: #eef2ff !important; }
+        .file-item { transition: all 0.2s ease; }
+        .file-item:hover { transform: translateY(-1px); }
+    </style>
+</head>
+<body class="h-full text-slate-800 antialiased flex flex-col justify-between">
+
+    <div class="flex-grow">
+        <header class="bg-white border-b border-slate-200">
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-indigo-600 p-2 rounded-lg text-white">
+                        <i data-lucide="files" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">PDF Compiler</h1>
+                        <p class="text-xs text-slate-500">100% Client-Side & Secure</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
+                    <span>Files never leave your browser</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-3xl mx-auto px-4 py-8 sm:px-6">
+            
+            <!-- Upload Zone -->
+            <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-2xl bg-white p-8 text-center hover:border-indigo-400 transition-colors cursor-pointer shadow-sm relative group">
+                <input type="file" id="pdf-input" accept="application/pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                <div class="flex flex-col items-center justify-center space-y-3 pointer-events-none">
+                    <div class="p-4 bg-indigo-50 text-indigo-600 rounded-full group-hover:scale-110 transition-transform">
+                        <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+                    </div>
+                    <div>
+                        <p class="text-slate-700 font-semibold text-base">Click to select or drag & drop PDFs</p>
+                        <p class="text-slate-400 text-xs mt-1">Select multiple PDF files to combine into a single document</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="file-section" class="mt-8 hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-2">
+                        <h2 class="font-semibold text-slate-900 text-lg">Selected Files</h2>
+                        <span id="file-count" class="bg-indigo-100 text-indigo-700 font-medium text-xs px-2.5 py-0.5 rounded-full">0 files</span>
+                    </div>
+                    <button id="clear-all-btn" class="text-xs font-medium text-rose-600 hover:text-rose-700 flex items-center space-x-1 transition-colors">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <span>Clear All</span>
+                    </button>
+                </div>
+
+                <!-- File List Container -->
+                <ul id="file-list" class="space-y-2 mb-6"></ul>
+
+                <!-- Export Action Card -->
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                    <div>
+                        <label for="output-filename" class="block text-xs font-medium text-slate-600 mb-1">Output File Name</label>
+                        <div class="flex rounded-md shadow-sm">
+                            <input type="text" id="output-filename" value="compiled-document" class="flex-1 min-w-0 block w-full px-3 py-2 text-sm text-slate-900 border border-slate-300 rounded-l-lg focus:ring-indigo-500 focus:border-indigo-500">
+                            <span class="inline-flex items-center px-3 rounded-r-lg border border-l-0 border-slate-300 bg-slate-50 text-slate-500 text-sm">.pdf</span>
+                        </div>
+                    </div>
+
+                    <button id="merge-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg shadow-sm flex items-center justify-center space-x-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="combine" class="w-5 h-5"></i>
+                        <span>Merge and Download PDF</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="status-box" class="mt-6 hidden p-4 rounded-xl text-sm flex items-center space-x-3">
+                <i id="status-icon" data-lucide="loader" class="w-5 h-5 animate-spin text-indigo-600"></i>
+                <span id="status-text" class="text-slate-700 font-medium"></span>
+            </div>
+
+        </main>
+    </div>
+
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
+        <p>PDF compilation happens locally on your device. Fast, private, and secure.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+
+            const pdfInput = document.getElementById('pdf-input');
+            const dropZone = document.getElementById('drop-zone');
+            const fileSection = document.getElementById('file-section');
+            const fileList = document.getElementById('file-list');
+            const fileCount = document.getElementById('file-count');
+            const clearAllBtn = document.getElementById('clear-all-btn');
+            const mergeBtn = document.getElementById('merge-btn');
+            const outputFilenameInput = document.getElementById('output-filename');
+            const statusBox = document.getElementById('status-box');
+            const statusText = document.getElementById('status-text');
+            const statusIcon = document.getElementById('status-icon');
+
+            let pdfFiles = [];
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('drag-over');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('drag-over');
+                });
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const files = Array.from(e.dataTransfer.files).filter(file => file.type === 'application/pdf');
+                addFiles(files);
+            });
+
+            pdfInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                addFiles(files);
+                pdfInput.value = ''; // Reset input selection
+            });
+
+            function addFiles(files) {
+                if (files.length === 0) return;
+                
+                files.forEach(file => {
+                    pdfFiles.push({
+                        id: Math.random().toString(36).substr(2, 9),
+                        file: file
+                    });
+                });
+
+                renderFileList();
+            }
+
+            function removeFile(id) {
+                pdfFiles = pdfFiles.filter(item => item.id !== id);
+                renderFileList();
+            }
+
+            function moveFile(index, direction) {
+                const targetIndex = index + direction;
+                if (targetIndex < 0 || targetIndex >= pdfFiles.length) return;
+                
+                const temp = pdfFiles[index];
+                pdfFiles[index] = pdfFiles[targetIndex];
+                pdfFiles[targetIndex] = temp;
+                
+                renderFileList();
+            }
+
+            clearAllBtn.addEventListener('click', () => {
+                pdfFiles = [];
+                renderFileList();
+                hideStatus();
+            });
+
+            function renderFileList() {
+                fileList.innerHTML = '';
+
+                if (pdfFiles.length === 0) {
+                    fileSection.classList.add('hidden');
+                    return;
+                }
+
+                fileSection.classList.remove('hidden');
+                fileCount.textContent = `${pdfFiles.length} file${pdfFiles.length > 1 ? 's' : ''}`;
+
+                pdfFiles.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'file-item bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between shadow-sm';
+                    
+                    const sizeInMB = (item.file.size / (1024 * 1024)).toFixed(2);
+
+                    li.innerHTML = `
+                        <div class="flex items-center space-x-3 overflow-hidden mr-3">
+                            <span class="text-xs font-semibold text-slate-400 w-5 text-center">${index + 1}</span>
+                            <div class="p-2 bg-rose-50 text-rose-600 rounded-lg shrink-0">
+                                <i data-lucide="file-text" class="w-5 h-5"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium text-slate-800 truncate">${escapeHtml(item.file.name)}</p>
+                                <p class="text-xs text-slate-400">${sizeInMB} MB</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <button onclick="window.movePdfFile(${index}, -1)" ${index === 0 ? 'disabled class="p-1 text-slate-300 cursor-not-allowed"' : 'class="p-1 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors"'} title="Move Up">
+                                <i data-lucide="chevron-up" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="window.movePdfFile(${index}, 1)" ${index === pdfFiles.length - 1 ? 'disabled class="p-1 text-slate-300 cursor-not-allowed"' : 'class="p-1 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors"'} title="Move Down">
+                                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="window.removePdfFile('${item.id}')" class="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors ml-1" title="Remove">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    `;
+
+                    fileList.appendChild(li);
+                });
+
+                lucide.createIcons();
+            }
+
+            // Global handlers for inline click events
+            window.removePdfFile = removeFile;
+            window.movePdfFile = moveFile;
+
+            mergeBtn.addEventListener('click', async () => {
+                if (pdfFiles.length === 0) return;
+
+                showStatus('Combining PDF pages...', 'loading');
+                mergeBtn.disabled = true;
+
+                try {
+                    const { PDFDocument } = PDFLib;
+                    const mergedPdf = await PDFDocument.create();
+
+                    for (let i = 0; i < pdfFiles.length; i++) {
+                        const item = pdfFiles[i];
+                        showStatus(`Processing file ${i + 1} of ${pdfFiles.length}: ${item.file.name}...`, 'loading');
+
+                        const arrayBuffer = await item.file.arrayBuffer();
+                        const pdf = await PDFDocument.load(arrayBuffer);
+                        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                        
+                        copiedPages.forEach((page) => mergedPdf.addPage(page));
+                    }
+
+                    showStatus('Generating merged document...', 'loading');
+                    const mergedBytes = await mergedPdf.save();
+
+                    // Download trigger
+                    const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    
+                    let filename = outputFilenameInput.value.trim() || 'compiled-document';
+                    if (!filename.toLowerCase().endsWith('.pdf')) {
+                        filename += '.pdf';
+                    }
+
+                    link.href = downloadUrl;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(downloadUrl);
+
+                    showStatus('PDF successfully compiled and downloaded!', 'success');
+                } catch (error) {
+                    console.error('PDF Merge Error:', error);
+                    showStatus('Failed to compile PDFs. Ensure none are password protected or corrupted.', 'error');
+                } finally {
+                    mergeBtn.disabled = false;
+                }
+            });
+
+            // Helper for feedback status styling
+            function showStatus(message, type) {
+                statusBox.classList.remove('hidden', 'bg-indigo-50', 'text-indigo-800', 'bg-emerald-50', 'text-emerald-800', 'bg-rose-50', 'text-rose-800');
+                
+                if (type === 'loading') {
+                    statusBox.classList.add('bg-indigo-50', 'text-indigo-800');
+                    statusIcon.className = 'w-5 h-5 animate-spin text-indigo-600';
+                    statusIcon.setAttribute('data-lucide', 'loader');
+                } else if (type === 'success') {
+                    statusBox.classList.add('bg-emerald-50', 'text-emerald-800');
+                    statusIcon.className = 'w-5 h-5 text-emerald-600';
+                    statusIcon.setAttribute('data-lucide', 'check-circle');
+                } else if (type === 'error') {
+                    statusBox.classList.add('bg-rose-50', 'text-rose-800');
+                    statusIcon.className = 'w-5 h-5 text-rose-600';
+                    statusIcon.setAttribute('data-lucide', 'alert-circle');
+                }
+
+                statusText.textContent = message;
+                lucide.createIcons();
+            }
+
+            function hideStatus() {
+                statusBox.classList.add('hidden');
+            }
+
+            function escapeHtml(str) {
+                return str.replace(/[&<>"']/g, (m) => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m]));
+            }
+        });
+    </script>
+</body>
+</html>
